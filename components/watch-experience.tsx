@@ -431,7 +431,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
   function handleFramePointerUp(event: PointerEvent<HTMLDivElement>) {
     const target = event.target;
-    if (target instanceof HTMLElement && target.closest("[data-player-controls='true']")) return;
+    if (target instanceof Element && target.closest("[data-player-controls='true']")) return;
 
     if (event.pointerType !== "touch" && event.pointerType !== "pen") {
       togglePlay();
@@ -713,7 +713,11 @@ function IconButton({
       aria-label={label}
       title={label}
       disabled={disabled}
-      onClick={onClick}
+      onPointerUp={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
       className={`yt-focus grid h-9 w-9 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 ${
         active
           ? "border-teal-300/50 bg-teal-300/18 text-teal-100"
