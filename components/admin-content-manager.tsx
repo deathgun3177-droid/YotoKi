@@ -694,15 +694,21 @@ export function AdminContentManager() {
                         </div>
                         <button
                           disabled={status === "saving" || freeBusy}
-                          className={`yt-focus inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          aria-pressed={episode.isFree}
+                          className={`yt-focus inline-flex h-10 min-w-28 items-center justify-between gap-2 rounded-full border px-2 text-xs font-bold uppercase tracking-[0.12em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
                             episode.isFree
-                              ? "border border-teal-300/35 bg-teal-300/18 text-teal-100 hover:bg-teal-300/24"
-                              : "border border-white/10 bg-white/[0.055] text-white hover:border-teal-300/35 hover:bg-white/[0.08]"
+                              ? "border-teal-300/45 bg-teal-300/18 text-teal-100 hover:bg-teal-300/24"
+                              : "border-white/10 bg-white/[0.055] text-slate-400 hover:border-teal-300/35 hover:bg-white/[0.08] hover:text-white"
                           }`}
                           type="button"
                           onClick={() => void handleToggleFreeEpisode(episode, !episode.isFree)}
                         >
-                          {freeBusy ? "Сольж байна" : episode.isFree ? "Үнэгүй асаалттай" : "Үнэгүй болгох"}
+                          <span>{freeBusy ? "..." : episode.isFree ? "ON" : "OFF"}</span>
+                          <span
+                            className={`h-6 w-6 rounded-full transition ${
+                              episode.isFree ? "translate-x-0 bg-teal-300 shadow-[0_0_18px_rgba(45,212,191,0.35)]" : "bg-white/20"
+                            }`}
+                          />
                         </button>
                       </div>
 
