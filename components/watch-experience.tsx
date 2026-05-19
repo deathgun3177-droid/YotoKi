@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Maximize, Pause, Play, SkipForward, Subtitles, Volume2, VolumeX } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize, Pause, Play, RotateCcw, RotateCw, SkipForward, Subtitles, Volume2, VolumeX } from "lucide-react";
+import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { isR2StoragePath } from "@/lib/r2-paths";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -39,6 +39,8 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   const videoRef = useRef<HTMLVideoElement>(null);
   const saveRef = useRef(0);
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef<{ side: "left" | "right"; time: number } | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.85);
@@ -95,6 +97,33 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
       }, 2400);
     }
   }, [isPlaying]);
+
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    showControls();
+
+    if (video.paused) {
+      void video.play();
+    } else {
+      video.pause();
+    }
+  }, [showControls]);
+
+  const seekBy = useCallback(
+    (seconds: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const max = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : duration;
+      const nextTime = max > 0 ? Math.min(max, Math.max(0, video.currentTime + seconds)) : Math.max(0, video.currentTime + seconds);
+      video.currentTime = nextTime;
+      setCurrentTime(nextTime);
+      showControls();
+    },
+    [duration, showControls]
+  );
 
   const toggleFullscreen = useCallback(() => {
     const player = playerRef.current;
@@ -251,6 +280,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented || isEditableTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
 
       if (event.key === "Escape" && softFullscreen) {
         event.preventDefault();
@@ -258,10 +288,32 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
         return;
       }
 
+      if (event.code === "Space" || event.key === " ") {
+        event.preventDefault();
+        if (!event.repeat) {
+          togglePlay();
+        }
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        seekBy(-5);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        seekBy(5);
+        return;
+      }
+
       if (event.key.toLowerCase() !== "f") return;
 
       event.preventDefault();
-      toggleFullscreen();
+      if (!event.repeat) {
+        toggleFullscreen();
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -269,7 +321,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [softFullscreen, toggleFullscreen]);
+  }, [seekBy, softFullscreen, toggleFullscreen, togglePlay]);
 
   useEffect(() => {
     if (!softFullscreen) return;
@@ -306,19 +358,50 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
   useEffect(() => {
     return () => {
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+      }
+
       unlockOrientation();
     };
   }, []);
 
-  function togglePlay() {
-    const video = videoRef.current;
-    if (!video) return;
+  function handleFramePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("[data-player-controls='true']")) return;
 
-    if (video.paused) {
-      void video.play();
-    } else {
-      video.pause();
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") {
+      togglePlay();
+      return;
     }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const side = event.clientX - rect.left < rect.width / 2 ? "left" : "right";
+    const now = Date.now();
+    const previousTap = lastTapRef.current;
+
+    if (previousTap && previousTap.side === side && now - previousTap.time < 320) {
+      if (tapTimerRef.current) {
+        clearTimeout(tapTimerRef.current);
+        tapTimerRef.current = null;
+      }
+
+      lastTapRef.current = null;
+      seekBy(side === "left" ? -5 : 5);
+      return;
+    }
+
+    lastTapRef.current = { side, time: now };
+
+    if (tapTimerRef.current) {
+      clearTimeout(tapTimerRef.current);
+    }
+
+    tapTimerRef.current = setTimeout(() => {
+      togglePlay();
+      tapTimerRef.current = null;
+      lastTapRef.current = null;
+    }, 260);
   }
 
   function handleLoadedMetadata() {
@@ -367,7 +450,11 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   function seekTo(value: string) {
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = Number(value);
+
+    const nextTime = Number(value);
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
+    showControls();
   }
 
   return (
@@ -384,14 +471,13 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
           onTouchStart={showControls}
           onFocus={showControls}
         >
-          <div className="yotoki-player-frame">
+          <div className="yotoki-player-frame" onPointerUp={handleFramePointerUp}>
             <video
               ref={videoRef}
               className="yotoki-video yotoki-player-video bg-black"
               poster={episode.thumbnail}
               playsInline
               preload="metadata"
-              onClick={togglePlay}
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
               onPlay={() => setIsPlaying(true)}
@@ -424,6 +510,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
             ) : null}
 
             <div
+              data-player-controls="true"
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/92 via-black/48 to-transparent px-3 pb-3 pt-16 transition duration-300 ${
                 controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
               }`}
@@ -439,8 +526,16 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
               />
 
               <div className="flex flex-wrap items-center gap-2 text-white">
+                <IconButton label="5 секунд ухрах" onClick={() => seekBy(-5)}>
+                  <RotateCcw size={18} />
+                </IconButton>
+
                 <IconButton label={isPlaying ? "Pause" : "Play"} onClick={togglePlay}>
                   {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                </IconButton>
+
+                <IconButton label="5 секунд урагшлах" onClick={() => seekBy(5)}>
+                  <RotateCw size={18} />
                 </IconButton>
 
                 {nextEpisode ? (
@@ -605,7 +700,7 @@ function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
 
-  return ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
 }
 
 async function lockLandscapeOrientation() {
