@@ -49,6 +49,8 @@ export function AdminContentManager() {
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [deletingEpisodeId, setDeletingEpisodeId] = useState("");
   const [updatingSubtitleId, setUpdatingSubtitleId] = useState("");
+  const [updatingEpisodeNumberId, setUpdatingEpisodeNumberId] = useState("");
+  const [episodeNumberDrafts, setEpisodeNumberDrafts] = useState<Record<string, number>>({});
   const [subtitleFiles, setSubtitleFiles] = useState<Record<string, File | null>>({});
   const configured = isSupabaseConfigured();
 
@@ -62,6 +64,7 @@ export function AdminContentManager() {
     async (mediaId: string) => {
       if (!configured || !mediaId) {
         setEpisodes([]);
+        setEpisodeNumberDrafts({});
         return;
       }
 
@@ -83,8 +86,7 @@ export function AdminContentManager() {
         return;
       }
 
-      setEpisodes(
-        data.map((episode) => ({
+      const nextEpisodes: EditableEpisode[] = data.map((episode) => ({
           id: String(episode.id),
           number: typeof episode.number === "number" ? episode.number : 1,
           quality: episode.quality === "720p" ? "720p" : "1080p",
@@ -92,8 +94,10 @@ export function AdminContentManager() {
           subtitlePath: typeof episode.subtitle_path === "string" ? episode.subtitle_path : undefined,
           thumbnailPath: typeof episode.thumbnail_path === "string" ? episode.thumbnail_path : undefined,
           releasedAt: typeof episode.released_at === "string" ? episode.released_at : ""
-        }))
-      );
+        }));
+
+      setEpisodes(nextEpisodes);
+      setEpisodeNumberDrafts(Object.fromEntries(nextEpisodes.map((episode) => [episode.id, episode.number])));
     },
     [configured]
   );
@@ -109,7 +113,11 @@ export function AdminContentManager() {
     }
 
     const supabase = createBrowserSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) {
+      setStatus("error");
+      setMessage("Supabase client үүссэнгүй.");
+      return;
+    }
 
     const [{ data: titleRows, error: titleError }, { data: episodeRows, error: episodeError }] = await Promise.all([
       supabase
@@ -195,7 +203,11 @@ export function AdminContentManager() {
     }
 
     const supabase = createBrowserSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) {
+      setStatus("error");
+      setMessage("Supabase client үүссэнгүй.");
+      return;
+    }
 
     const { error } = await supabase
       .from(titlesTable)
@@ -393,6 +405,81 @@ export function AdminContentManager() {
     }
   }
 
+  async function handleUpdateEpisodeNumber(episode: EditableEpisode) {
+    if (!form) return;
+
+    const nextNumber = normalizeEpisodeNumber(episodeNumberDrafts[episode.id] ?? episode.number);
+    if (!nextNumber) {
+      setStatus("error");
+      setMessage("Ангийн дугаар 1-ээс их бүхэл тоо байх ёстой.");
+      return;
+    }
+
+    if (nextNumber === episode.number) {
+      setStatus("done");
+      setMessage(`${episode.number}-р ангийн дугаар өөрчлөгдөөгүй байна.`);
+      return;
+    }
+
+    const duplicate = episodes.find((item) => item.id !== episode.id && item.number === nextNumber);
+    if (duplicate) {
+      setStatus("error");
+      setMessage(`${nextNumber}-р анги аль хэдийн байна. Эхлээд тэр ангийн дугаарыг солино уу.`);
+      return;
+    }
+
+    setStatus("saving");
+    setUpdatingEpisodeNumberId(episode.id);
+    setMessage("");
+
+    if (!configured) {
+      setEpisodes((current) =>
+        current
+          .map((item) => (item.id === episode.id ? { ...item, number: nextNumber } : item))
+          .sort((a, b) => a.number - b.number)
+      );
+      setEpisodeNumberDrafts((current) => ({ ...current, [episode.id]: nextNumber }));
+      setStatus("done");
+      setUpdatingEpisodeNumberId("");
+      setMessage(`${episode.number}-р анги ${nextNumber}-р анги болж солигдлоо.`);
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    if (!supabase) {
+      setStatus("error");
+      setUpdatingEpisodeNumberId("");
+      setMessage("Supabase client үүссэнгүй.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from(episodesTable)
+      .update({
+        number: nextNumber,
+        title: form.kind === "movie" ? "Бүрэн кино" : `Анги ${nextNumber}`,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", episode.id);
+
+    if (error) {
+      setStatus("error");
+      setUpdatingEpisodeNumberId("");
+      setMessage(error.message.includes("duplicate") ? `${nextNumber}-р анги аль хэдийн байна.` : error.message);
+      return;
+    }
+
+    setEpisodes((current) =>
+      current
+        .map((item) => (item.id === episode.id ? { ...item, number: nextNumber } : item))
+        .sort((a, b) => a.number - b.number)
+    );
+    setEpisodeNumberDrafts((current) => ({ ...current, [episode.id]: nextNumber }));
+    setStatus("done");
+    setUpdatingEpisodeNumberId("");
+    setMessage(`${episode.number}-р анги ${nextNumber}-р анги болж солигдлоо.`);
+  }
+
   function updateForm(next: Partial<EditableTitle>) {
     setForm((current) => (current ? { ...current, ...next } : current));
   }
@@ -502,6 +589,9 @@ export function AdminContentManager() {
                 {episodes.map((episode) => {
                   const selectedSubtitleFile = subtitleFiles[episode.id] ?? null;
                   const subtitleBusy = updatingSubtitleId === episode.id;
+                  const draftNumber = episodeNumberDrafts[episode.id] ?? episode.number;
+                  const numberBusy = updatingEpisodeNumberId === episode.id;
+                  const numberChanged = draftNumber !== episode.number;
 
                   return (
                     <div key={episode.id} className="grid gap-3 rounded-md border border-white/10 bg-white/[0.035] px-3 py-3">
@@ -521,6 +611,36 @@ export function AdminContentManager() {
                           <Trash2 size={16} />
                           {deletingEpisodeId === episode.id ? "Устгаж байна" : "Устгах"}
                         </button>
+                      </div>
+
+                      <div className="grid gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[140px_auto_1fr] sm:items-end">
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-medium text-slate-400">Анги дугаар</span>
+                          <input
+                            value={draftNumber}
+                            min={1}
+                            type="number"
+                            onChange={(event) =>
+                              setEpisodeNumberDrafts((current) => ({
+                                ...current,
+                                [episode.id]: Number(event.target.value)
+                              }))
+                            }
+                            className="yt-focus h-10 w-full rounded-md border border-white/10 bg-black/24 px-3 text-sm font-semibold text-white focus:border-teal-300/45"
+                          />
+                        </label>
+                        <button
+                          disabled={status === "saving" || numberBusy || !numberChanged}
+                          className="yt-focus inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.055] px-4 text-sm font-semibold text-white transition hover:border-teal-300/35 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleUpdateEpisodeNumber(episode)}
+                        >
+                          <Edit3 size={15} />
+                          {numberBusy ? "Сольж байна" : "Дугаар солих"}
+                        </button>
+                        <p className="text-xs leading-5 text-slate-500">
+                          Буруу дугаартай оруулсан бол video дахин upload хийхгүйгээр эндээс солино.
+                        </p>
                       </div>
 
                       <div className="grid gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
@@ -664,6 +784,12 @@ function normalizeGenresInput(value: string, mediaKind: MediaKind) {
 
 function normalizeYear(value: number) {
   return Number.isFinite(value) && value >= 1900 ? Math.round(value) : new Date().getFullYear();
+}
+
+function normalizeEpisodeNumber(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  const nextValue = Math.round(value);
+  return nextValue >= 1 ? nextValue : 0;
 }
 
 function toSupabaseStoragePaths(value?: string) {

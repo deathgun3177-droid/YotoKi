@@ -243,25 +243,37 @@ export function AdminUploadForm() {
         subtitlePath = await uploadFileToR2(supabase, subtitleFile, subtitleKey);
       }
 
-      const episodeUpsert = await supabase.from(episodesTable).upsert(
-        {
-          media_id: selectedMedia.id,
-          number: episodeNumber,
-          title: selectedMedia.kind === "movie" ? "Бүрэн кино" : `Анги ${episodeNumber}`,
-          runtime: "24 мин",
-          quality: selectedMedia.quality,
-          video_path: videoStoragePath,
-          subtitle_path: subtitlePath,
-          thumbnail_path: null,
-          released_at: new Date().toISOString()
-        },
-        { onConflict: "media_id,number" }
-      );
+      const episodePayload = {
+        media_id: selectedMedia.id,
+        number: episodeNumber,
+        title: selectedMedia.kind === "movie" ? "Бүрэн кино" : `Анги ${episodeNumber}`,
+        runtime: "24 мин",
+        quality: selectedMedia.quality,
+        video_path: videoStoragePath,
+        subtitle_path: subtitlePath,
+        thumbnail_path: null,
+        released_at: new Date().toISOString()
+      };
 
-      if (episodeUpsert.error) throw episodeUpsert.error;
+      const { data: existingEpisode, error: existingEpisodeError } = await supabase
+        .from(episodesTable)
+        .select("id")
+        .eq("media_id", selectedMedia.id)
+        .eq("number", episodeNumber)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingEpisodeError) throw existingEpisodeError;
+
+      const existingEpisodeId = getPathValue(existingEpisode, "id");
+      const episodeResult = existingEpisodeId
+        ? await supabase.from(episodesTable).update({ ...episodePayload, updated_at: new Date().toISOString() }).eq("id", existingEpisodeId)
+        : await supabase.from(episodesTable).insert(episodePayload);
+
+      if (episodeResult.error) throw episodeResult.error;
 
       setEpisodeStatus("done");
-      setEpisodeMessage(`${selectedMedia.title} дээр ${episodeNumber}-р анги нэмэгдлээ.`);
+      setEpisodeMessage(`${selectedMedia.title} дээр ${episodeNumber}-р анги ${existingEpisodeId ? "шинэчлэгдлээ" : "нэмэгдлээ"}.`);
       setVideoFile(null);
       setSubtitleFile(null);
     } catch (error) {
