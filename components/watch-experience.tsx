@@ -41,6 +41,8 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTapRef = useRef<{ side: "left" | "right"; time: number } | null>(null);
+  const fullscreenPlaybackRef = useRef<boolean | null>(null);
+  const fullscreenRestoreTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.85);
@@ -125,6 +127,49 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     [duration, showControls]
   );
 
+  const clearFullscreenRestoreTimers = useCallback(() => {
+    fullscreenRestoreTimersRef.current.forEach((timer) => clearTimeout(timer));
+    fullscreenRestoreTimersRef.current = [];
+  }, []);
+
+  const rememberFullscreenPlayback = useCallback(() => {
+    const video = videoRef.current;
+    clearFullscreenRestoreTimers();
+    fullscreenPlaybackRef.current = video ? !video.paused && !video.ended : null;
+  }, [clearFullscreenRestoreTimers]);
+
+  const restoreFullscreenPlayback = useCallback(() => {
+    const video = videoRef.current;
+    const wasPlaying = fullscreenPlaybackRef.current;
+    if (!video || wasPlaying === null) return;
+
+    clearFullscreenRestoreTimers();
+
+    const restore = () => {
+      if (wasPlaying) {
+        if (video.paused) {
+          void video.play().catch(() => {
+            // Some mobile browsers block play() after fullscreen changes without a fresh gesture.
+          });
+        }
+        return;
+      }
+
+      if (!video.paused) {
+        video.pause();
+      }
+    };
+
+    const finish = () => {
+      restore();
+      fullscreenPlaybackRef.current = null;
+      fullscreenRestoreTimersRef.current = [];
+    };
+
+    restore();
+    fullscreenRestoreTimersRef.current = [setTimeout(restore, 90), setTimeout(finish, 260)];
+  }, [clearFullscreenRestoreTimers]);
+
   const toggleFullscreen = useCallback(() => {
     const player = playerRef.current;
     if (!player) return;
@@ -132,11 +177,18 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     const fullscreenDocument = document as FullscreenDocument;
     const fullscreenElement = document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement;
 
+    rememberFullscreenPlayback();
     showControls();
 
     if (fullscreenElement || softFullscreen) {
       const exitFullscreen = document.exitFullscreen ?? fullscreenDocument.webkitExitFullscreen;
-      if (exitFullscreen) void exitFullscreen.call(document);
+      if (exitFullscreen) {
+        void Promise.resolve(exitFullscreen.call(document))
+          .catch(() => undefined)
+          .finally(restoreFullscreenPlayback);
+      } else {
+        restoreFullscreenPlayback();
+      }
       setSoftFullscreen(false);
       unlockOrientation();
       return;
@@ -147,21 +199,26 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     if (!requestFullscreen) {
       setSoftFullscreen(true);
       void lockLandscapeOrientation();
+      restoreFullscreenPlayback();
       return;
     }
 
     try {
-      void Promise.resolve(requestFullscreen.call(fullscreenPlayer)).then(() => {
-        void lockLandscapeOrientation();
-      }).catch(() => {
-        setSoftFullscreen(true);
-        void lockLandscapeOrientation();
-      });
+      void Promise.resolve(requestFullscreen.call(fullscreenPlayer))
+        .then(() => {
+          void lockLandscapeOrientation();
+        })
+        .catch(() => {
+          setSoftFullscreen(true);
+          void lockLandscapeOrientation();
+        })
+        .finally(restoreFullscreenPlayback);
     } catch {
       setSoftFullscreen(true);
       void lockLandscapeOrientation();
+      restoreFullscreenPlayback();
     }
-  }, [showControls, softFullscreen]);
+  }, [rememberFullscreenPlayback, restoreFullscreenPlayback, showControls, softFullscreen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -284,7 +341,10 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
       if (event.key === "Escape" && softFullscreen) {
         event.preventDefault();
+        rememberFullscreenPlayback();
         setSoftFullscreen(false);
+        unlockOrientation();
+        restoreFullscreenPlayback();
         return;
       }
 
@@ -321,7 +381,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [seekBy, softFullscreen, toggleFullscreen, togglePlay]);
+  }, [rememberFullscreenPlayback, restoreFullscreenPlayback, seekBy, softFullscreen, toggleFullscreen, togglePlay]);
 
   useEffect(() => {
     if (!softFullscreen) return;
@@ -345,6 +405,8 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
       } else {
         unlockOrientation();
       }
+
+      restoreFullscreenPlayback();
     }
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -354,7 +416,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
     };
-  }, []);
+  }, [restoreFullscreenPlayback]);
 
   useEffect(() => {
     return () => {
@@ -362,9 +424,10 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
         clearTimeout(tapTimerRef.current);
       }
 
+      clearFullscreenRestoreTimers();
       unlockOrientation();
     };
-  }, []);
+  }, [clearFullscreenRestoreTimers]);
 
   function handleFramePointerUp(event: PointerEvent<HTMLDivElement>) {
     const target = event.target;
