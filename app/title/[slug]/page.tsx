@@ -89,10 +89,15 @@ export default async function DetailPage({ params }: DetailPageProps) {
           {title.episodes.length ? (
             title.episodes.map((episode) => (
               <Link
-                className="soft-border group grid min-h-[88px] grid-cols-[100px_minmax(0,1fr)] overflow-hidden rounded-lg bg-white/[0.035] transition hover:border-teal-300/40 hover:bg-white/[0.06] sm:min-h-[96px] sm:grid-cols-[140px_minmax(0,1fr)]"
+                className="soft-border group relative grid min-h-[88px] grid-cols-[100px_minmax(0,1fr)] overflow-hidden rounded-lg bg-white/[0.035] transition hover:border-teal-300/40 hover:bg-white/[0.06] sm:min-h-[96px] sm:grid-cols-[140px_minmax(0,1fr)]"
                 href={`/watch/${title.slug}/${episode.number}`}
                 key={episode.id}
               >
+                {episode.isFree ? (
+                  <span className="pointer-events-none absolute right-2 top-2 z-10 rounded bg-amber-300 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-black shadow-lg shadow-amber-300/20">
+                    ҮНЭГҮЙ
+                  </span>
+                ) : null}
                 <div className="relative h-full min-h-[88px] w-full overflow-hidden bg-white/[0.04] sm:min-h-[96px]">
                   <Image src={episode.thumbnail} alt="" fill className="object-cover" sizes="(max-width: 640px) 112px, 140px" />
                   <div className="absolute inset-0 grid place-items-center bg-black/20 opacity-0 transition group-hover:opacity-100">
@@ -102,7 +107,6 @@ export default async function DetailPage({ params }: DetailPageProps) {
                 <div className="flex min-w-0 flex-col justify-center p-3 sm:p-4">
                   <h3 className="truncate font-semibold text-white">{episode.number}-р анги</h3>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em]">
-                    {episode.isFree ? <span className="rounded bg-amber-300/14 px-2 py-1 text-amber-100">ҮНЭГҮЙ</span> : null}
                     <span className="rounded bg-white/8 px-2 py-1 text-slate-300">{episode.quality}</span>
                     {episode.subtitleUrl ? <span className="rounded bg-teal-300/14 px-2 py-1 text-teal-100">MN</span> : null}
                   </div>

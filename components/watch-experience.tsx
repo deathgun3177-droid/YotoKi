@@ -699,7 +699,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
             return (
               <Link
-                className={`grid min-h-[78px] grid-cols-[92px_1fr] overflow-hidden rounded-lg border transition ${
+                className={`relative grid min-h-[78px] grid-cols-[92px_1fr] overflow-hidden rounded-lg border transition ${
                   active
                     ? "border-teal-300/50 bg-teal-300/10"
                     : "border-white/8 bg-black/18 hover:border-white/18 hover:bg-white/[0.055]"
@@ -707,14 +707,16 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
                 href={`/watch/${media.slug}/${item.number}`}
                 key={item.id}
               >
+                {item.isFree ? (
+                  <span className="pointer-events-none absolute right-2 top-2 z-10 rounded bg-amber-300 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-black shadow-lg shadow-amber-300/20">
+                    ҮНЭГҮЙ
+                  </span>
+                ) : null}
                 <div className="relative min-h-full self-stretch">
                   <Image src={item.thumbnail} alt="" fill className="object-cover" sizes="92px" />
                 </div>
                 <div className="min-w-0 p-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-200">
-                    EP {item.number}
-                    {item.isFree ? <span className="ml-2 rounded bg-amber-300/14 px-1.5 py-0.5 text-[10px] text-amber-100">FREE</span> : null}
-                  </p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-200">EP {item.number}</p>
                   <p className="mt-1 truncate text-sm text-white">{item.title}</p>
                   <p className="mt-1 text-xs text-slate-500">{item.runtime}</p>
                 </div>
