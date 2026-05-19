@@ -84,6 +84,8 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     if (!subtitlesEnabled || subtitleStatus !== "ready") return "";
     return subtitleCues.find((cue) => currentTime >= cue.start && currentTime <= cue.end)?.text ?? "";
   }, [currentTime, subtitleCues, subtitleStatus, subtitlesEnabled]);
+  const seekPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+  const volumePercent = Math.min(100, Math.max(0, (isMuted ? 0 : volume) * 100));
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
@@ -585,7 +587,10 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
                 max={duration || 0}
                 value={Math.min(currentTime, duration || 0)}
                 onChange={(event) => seekTo(event.target.value)}
-                className="mb-3 h-1 w-full accent-teal-300"
+                className="yotoki-range mb-3 h-1 w-full"
+                style={{
+                  background: `linear-gradient(to right, rgba(45, 212, 191, 0.96) ${seekPercent}%, rgba(255, 255, 255, 0.36) ${seekPercent}%)`
+                }}
               />
 
               <div className="flex flex-wrap items-center gap-2 text-white">
@@ -626,7 +631,10 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
                       setIsMuted(false);
                       setVolume(Number(event.target.value));
                     }}
-                    className="hidden h-1 w-20 accent-teal-300 sm:block"
+                    className="yotoki-range hidden h-1 w-20 sm:block"
+                    style={{
+                      background: `linear-gradient(to right, rgba(45, 212, 191, 0.96) ${volumePercent}%, rgba(255, 255, 255, 0.32) ${volumePercent}%)`
+                    }}
                   />
                   <IconButton
                     active={subtitlesEnabled}
