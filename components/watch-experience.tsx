@@ -27,6 +27,11 @@ type FullscreenTarget = HTMLDivElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
+type LockableScreenOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+  unlock?: () => void;
+};
+
 export function WatchExperience({ media, episode, nextEpisode }: WatchExperienceProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -100,27 +105,34 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
     showControls();
 
-    if (fullscreenElement) {
+    if (fullscreenElement || softFullscreen) {
       const exitFullscreen = document.exitFullscreen ?? fullscreenDocument.webkitExitFullscreen;
       if (exitFullscreen) void exitFullscreen.call(document);
+      setSoftFullscreen(false);
+      unlockOrientation();
       return;
     }
 
     const fullscreenPlayer = player as FullscreenTarget;
     const requestFullscreen = fullscreenPlayer.requestFullscreen ?? fullscreenPlayer.webkitRequestFullscreen;
     if (!requestFullscreen) {
-      setSoftFullscreen((current) => !current);
+      setSoftFullscreen(true);
+      void lockLandscapeOrientation();
       return;
     }
 
     try {
-      void Promise.resolve(requestFullscreen.call(fullscreenPlayer)).catch(() => {
-        setSoftFullscreen((current) => !current);
+      void Promise.resolve(requestFullscreen.call(fullscreenPlayer)).then(() => {
+        void lockLandscapeOrientation();
+      }).catch(() => {
+        setSoftFullscreen(true);
+        void lockLandscapeOrientation();
       });
     } catch {
-      setSoftFullscreen((current) => !current);
+      setSoftFullscreen(true);
+      void lockLandscapeOrientation();
     }
-  }, [showControls]);
+  }, [showControls, softFullscreen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,7 +285,14 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   useEffect(() => {
     function handleFullscreenChange() {
       const fullscreenDocument = document as FullscreenDocument;
-      setNativeFullscreen(Boolean(document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement));
+      const isFullscreen = Boolean(document.fullscreenElement ?? fullscreenDocument.webkitFullscreenElement);
+      setNativeFullscreen(isFullscreen);
+
+      if (isFullscreen) {
+        void lockLandscapeOrientation();
+      } else {
+        unlockOrientation();
+      }
     }
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -282,6 +301,12 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      unlockOrientation();
     };
   }, []);
 
@@ -346,119 +371,123 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl gap-4 px-4 pb-12 pt-4 sm:px-6 lg:grid-cols-[1fr_320px] lg:px-8">
+    <div className="mx-auto grid w-full max-w-7xl gap-4 px-0 pb-12 pt-0 sm:px-6 sm:pt-4 lg:grid-cols-[1fr_320px] lg:px-8">
       <section className="min-w-0">
         <div
           ref={playerRef}
-          className={`overflow-hidden bg-black shadow-2xl shadow-black/50 ${
-            softFullscreen ? "fixed inset-0 z-50 flex items-center justify-center rounded-none" : "relative rounded-lg"
+          className={`yotoki-player overflow-hidden bg-black shadow-2xl shadow-black/50 ${
+            fullscreenLayout
+              ? "yotoki-player--fullscreen fixed inset-0 z-50 rounded-none"
+              : "relative rounded-none sm:rounded-lg"
           } ${controlsVisible ? "" : "cursor-none"}`}
           onMouseMove={showControls}
           onTouchStart={showControls}
           onFocus={showControls}
         >
-          <video
-            ref={videoRef}
-            className={`yotoki-video bg-black ${softFullscreen ? "h-screen w-screen object-contain" : "aspect-video w-full"}`}
-            poster={episode.thumbnail}
-            playsInline
-            preload="metadata"
-            onClick={togglePlay}
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={handleEnded}
-          >
-            {streamVideoUrl ? <source key={streamVideoUrl} src={streamVideoUrl} type="video/mp4" /> : null}
-          </video>
+          <div className="yotoki-player-frame">
+            <video
+              ref={videoRef}
+              className="yotoki-video yotoki-player-video bg-black"
+              poster={episode.thumbnail}
+              playsInline
+              preload="metadata"
+              onClick={togglePlay}
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={handleEnded}
+            >
+              {streamVideoUrl ? <source key={streamVideoUrl} src={streamVideoUrl} type="video/mp4" /> : null}
+            </video>
 
-          {activeSubtitle ? (
-            <div className="pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center">
-              <span
-                className={`inline-block max-w-[92%] whitespace-pre-line rounded-md bg-black/62 font-semibold leading-snug text-white shadow-[0_3px_18px_rgba(0,0,0,0.75)] ${
-                  fullscreenLayout ? "px-4 py-2 text-2xl sm:text-3xl lg:text-4xl" : "px-3 py-1.5 text-base sm:text-xl"
-                }`}
-              >
-                {activeSubtitle}
-              </span>
-            </div>
-          ) : null}
-
-          {streamStatus === "loading" ? (
-            <div className="absolute inset-0 grid place-items-center bg-black/50 text-sm font-semibold text-slate-200">Video ачаалж байна...</div>
-          ) : null}
-
-          {streamStatus === "error" ? (
-            <div className="absolute inset-0 grid place-items-center bg-black/70 px-5 text-center text-sm font-semibold text-rose-100">
-              {streamState.message || "Video ачаалж чадсангүй."}
-            </div>
-          ) : null}
-
-          <div
-            className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/92 via-black/48 to-transparent px-3 pb-3 pt-16 transition duration-300 ${
-              controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
-            }`}
-          >
-            <input
-              aria-label="Seek"
-              type="range"
-              min={0}
-              max={duration || 0}
-              value={Math.min(currentTime, duration || 0)}
-              onChange={(event) => seekTo(event.target.value)}
-              className="mb-3 h-1 w-full accent-teal-300"
-            />
-
-            <div className="flex flex-wrap items-center gap-2 text-white">
-              <IconButton label={isPlaying ? "Pause" : "Play"} onClick={togglePlay}>
-                {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-              </IconButton>
-
-              {nextEpisode ? (
-                <IconButton label="Next episode" onClick={() => router.push(`/watch/${media.slug}/${nextEpisode.number}`)}>
-                  <SkipForward size={18} />
-                </IconButton>
-              ) : null}
-
-              <span className="min-w-[92px] text-xs tabular-nums text-slate-300">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-
-              <div className="ml-auto flex items-center gap-2">
-                <IconButton label={isMuted ? "Unmute" : "Mute"} onClick={() => setIsMuted((current) => !current)}>
-                  {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                </IconButton>
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={isMuted ? 0 : volume}
-                  onChange={(event) => {
-                    setIsMuted(false);
-                    setVolume(Number(event.target.value));
-                  }}
-                  className="hidden h-1 w-20 accent-teal-300 sm:block"
-                />
-                <IconButton
-                  active={subtitlesEnabled}
-                  disabled={subtitleStatus === "missing"}
-                  label="Mongolian subtitles"
-                  onClick={() => setSubtitlesEnabled((current) => !current)}
+            {activeSubtitle ? (
+              <div className="pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center">
+                <span
+                  className={`inline-block max-w-[92%] whitespace-pre-line rounded-md bg-black/62 font-semibold leading-snug text-white shadow-[0_3px_18px_rgba(0,0,0,0.75)] ${
+                    fullscreenLayout ? "px-4 py-2 text-2xl sm:text-3xl lg:text-4xl" : "px-3 py-1.5 text-base sm:text-xl"
+                  }`}
                 >
-                  <Subtitles size={18} />
+                  {activeSubtitle}
+                </span>
+              </div>
+            ) : null}
+
+            {streamStatus === "loading" ? (
+              <div className="absolute inset-0 grid place-items-center bg-black/50 text-sm font-semibold text-slate-200">Video ачаалж байна...</div>
+            ) : null}
+
+            {streamStatus === "error" ? (
+              <div className="absolute inset-0 grid place-items-center bg-black/70 px-5 text-center text-sm font-semibold text-rose-100">
+                {streamState.message || "Video ачаалж чадсангүй."}
+              </div>
+            ) : null}
+
+            <div
+              className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/92 via-black/48 to-transparent px-3 pb-3 pt-16 transition duration-300 ${
+                controlsVisible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
+              }`}
+            >
+              <input
+                aria-label="Seek"
+                type="range"
+                min={0}
+                max={duration || 0}
+                value={Math.min(currentTime, duration || 0)}
+                onChange={(event) => seekTo(event.target.value)}
+                className="mb-3 h-1 w-full accent-teal-300"
+              />
+
+              <div className="flex flex-wrap items-center gap-2 text-white">
+                <IconButton label={isPlaying ? "Pause" : "Play"} onClick={togglePlay}>
+                  {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
                 </IconButton>
-                <IconButton label="Fullscreen" onClick={toggleFullscreen}>
-                  <Maximize size={18} />
-                </IconButton>
+
+                {nextEpisode ? (
+                  <IconButton label="Next episode" onClick={() => router.push(`/watch/${media.slug}/${nextEpisode.number}`)}>
+                    <SkipForward size={18} />
+                  </IconButton>
+                ) : null}
+
+                <span className="min-w-[92px] text-xs tabular-nums text-slate-300">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+
+                <div className="ml-auto flex items-center gap-2">
+                  <IconButton label={isMuted ? "Unmute" : "Mute"} onClick={() => setIsMuted((current) => !current)}>
+                    {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                  </IconButton>
+                  <input
+                    aria-label="Volume"
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={isMuted ? 0 : volume}
+                    onChange={(event) => {
+                      setIsMuted(false);
+                      setVolume(Number(event.target.value));
+                    }}
+                    className="hidden h-1 w-20 accent-teal-300 sm:block"
+                  />
+                  <IconButton
+                    active={subtitlesEnabled}
+                    disabled={subtitleStatus === "missing"}
+                    label="Mongolian subtitles"
+                    onClick={() => setSubtitlesEnabled((current) => !current)}
+                  >
+                    <Subtitles size={18} />
+                  </IconButton>
+                  <IconButton label="Fullscreen" onClick={toggleFullscreen}>
+                    <Maximize size={18} />
+                  </IconButton>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-5 px-4 sm:px-0">
           <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
             <span className="rounded bg-teal-300/14 px-2 py-1 text-teal-100">{episodeLabel}</span>
             <span className="rounded bg-white/8 px-2 py-1 text-slate-300">{episode.quality}</span>
@@ -471,7 +500,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
         </div>
       </section>
 
-      <aside className="soft-border h-max rounded-lg bg-white/[0.035] p-3">
+      <aside className="soft-border mx-4 h-max rounded-lg bg-white/[0.035] p-3 sm:mx-0">
         <div className="mb-3 flex items-center justify-between px-1">
           <h2 className="font-semibold text-white">Анги сонгох</h2>
           <span className="text-xs text-slate-500">{media.episodes.length}</span>
@@ -527,7 +556,7 @@ function IconButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`yt-focus grid h-10 w-10 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`yt-focus grid h-9 w-9 place-items-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:w-10 ${
         active
           ? "border-teal-300/50 bg-teal-300/18 text-teal-100"
           : "border-white/10 bg-white/8 text-slate-100 hover:border-white/24 hover:bg-white/14"
@@ -577,4 +606,28 @@ function isEditableTarget(target: EventTarget | null) {
   if (target.isContentEditable) return true;
 
   return ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
+}
+
+async function lockLandscapeOrientation() {
+  if (typeof screen === "undefined" || !screen.orientation) return;
+
+  const orientation = screen.orientation as LockableScreenOrientation;
+  if (!orientation.lock) return;
+
+  try {
+    await orientation.lock("landscape");
+  } catch {
+    // Browsers may reject orientation lock unless fullscreen is active.
+  }
+}
+
+function unlockOrientation() {
+  if (typeof screen === "undefined" || !screen.orientation) return;
+
+  const orientation = screen.orientation as LockableScreenOrientation;
+  try {
+    orientation.unlock?.();
+  } catch {
+    // Some mobile browsers expose lock without unlock.
+  }
 }
