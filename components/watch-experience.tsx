@@ -629,13 +629,13 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
 
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-4 px-0 pb-12 pt-0 sm:px-6 sm:pt-4 lg:grid-cols-[1fr_320px] lg:px-8">
-      <section className="min-w-0">
+      <section className="soft-border mx-4 min-w-0 overflow-hidden rounded-lg bg-white/[0.035] p-2 shadow-2xl shadow-black/24 sm:mx-0 sm:p-3">
         <div
           ref={playerRef}
           className={`yotoki-player overflow-hidden bg-black shadow-2xl shadow-black/50 ${
             fullscreenLayout
               ? "yotoki-player--fullscreen fixed inset-0 z-50 rounded-none"
-              : "relative rounded-none sm:rounded-lg"
+              : "relative rounded-md"
           } ${controlsVisible ? "" : "cursor-none"}`}
           onMouseMove={showControls}
           onTouchStart={showControls}
@@ -790,7 +790,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
           </div>
         </div>
 
-        <div className="mt-5 px-4 sm:px-0">
+        <div className="px-2 pb-2 pt-4 sm:px-1">
           <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
             {episode.isFree ? <span className="rounded bg-amber-300/14 px-2 py-1 text-amber-100">ҮНЭГҮЙ</span> : null}
             <span className="rounded bg-teal-300/14 px-2 py-1 text-teal-100">{episodeLabel}</span>
