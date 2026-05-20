@@ -574,9 +574,9 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
             </video>
 
             {activeSubtitle ? (
-              <div className="pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center">
+              <div className="yotoki-subtitle-wrap pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center">
                 <span
-                  className={`inline-block max-w-[92%] whitespace-pre-line rounded-md bg-black/62 font-semibold leading-snug text-white shadow-[0_3px_18px_rgba(0,0,0,0.75)] ${
+                  className={`yotoki-subtitle-text inline-block max-w-[92%] whitespace-pre-line rounded-md bg-black/62 font-semibold leading-snug text-white shadow-[0_3px_18px_rgba(0,0,0,0.75)] ${
                     fullscreenLayout ? "px-4 py-2 text-2xl sm:text-3xl lg:text-4xl" : "px-3 py-1.5 text-base sm:text-xl"
                   }`}
                 >

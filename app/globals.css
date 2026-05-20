@@ -154,6 +154,35 @@ main {
   }
 }
 
+@media (max-width: 768px) {
+  .yotoki-subtitle-wrap {
+    inset-inline: 0.75rem !important;
+    bottom: clamp(3.75rem, 17%, 6rem) !important;
+  }
+
+  .yotoki-player--fullscreen .yotoki-subtitle-wrap {
+    bottom: clamp(4.5rem, 18%, 7.5rem) !important;
+  }
+
+  .yotoki-subtitle-text {
+    display: -webkit-box !important;
+    max-width: 92% !important;
+    overflow: hidden !important;
+    padding: 0.28rem 0.55rem !important;
+    font-size: clamp(0.78rem, 3.55vw, 1rem) !important;
+    line-height: 1.28 !important;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .yotoki-player--fullscreen .yotoki-subtitle-text {
+    max-width: 90% !important;
+    padding: 0.35rem 0.65rem !important;
+    font-size: clamp(0.86rem, 3.85vw, 1.12rem) !important;
+    line-height: 1.25 !important;
+  }
+}
+
 .line-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
