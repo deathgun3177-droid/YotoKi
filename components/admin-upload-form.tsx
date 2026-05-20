@@ -8,6 +8,7 @@ import { mediaTitles } from "@/lib/content";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { filenamesMatch } from "@/lib/subtitles";
 import { formatRuntime } from "@/lib/time";
+import { readVideoDuration } from "@/lib/video-duration";
 
 type UploadState = "idle" | "uploading" | "done" | "error";
 
@@ -281,6 +282,7 @@ export function AdminUploadForm() {
         number: episodeNumber,
         title: selectedMedia.kind === "movie" ? "Бүрэн кино" : `Анги ${episodeNumber}`,
         runtime,
+        duration_seconds: durationSeconds > 0 ? Math.round(durationSeconds) : null,
         quality: selectedMedia.quality,
         video_path: videoStoragePath,
         subtitle_path: subtitlePath,
@@ -299,9 +301,7 @@ export function AdminUploadForm() {
       if (existingEpisodeError) throw existingEpisodeError;
 
       const existingEpisodeId = getPathValue(existingEpisode, "id");
-      const episodeResult = existingEpisodeId
-        ? await supabase.from(episodesTable).update({ ...episodePayload, updated_at: new Date().toISOString() }).eq("id", existingEpisodeId)
-        : await supabase.from(episodesTable).insert(episodePayload);
+      const episodeResult = await saveEpisodePayload(supabase, existingEpisodeId, episodePayload);
 
       if (episodeResult.error) throw episodeResult.error;
 
@@ -623,35 +623,27 @@ function getDurationStatusLabel(status: "idle" | "loading" | "ready" | "error", 
   return "Runtime metadata";
 }
 
-function readVideoDuration(file: File) {
-  return new Promise<number>((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const video = document.createElement("video");
+async function saveEpisodePayload(supabase: SupabaseClient, existingEpisodeId: unknown, payload: Record<string, unknown>) {
+  const writePayload = existingEpisodeId ? { ...payload, updated_at: new Date().toISOString() } : payload;
+  const result = existingEpisodeId
+    ? await supabase.from(episodesTable).update(writePayload).eq("id", existingEpisodeId)
+    : await supabase.from(episodesTable).insert(writePayload);
 
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      video.removeAttribute("src");
-      video.load();
-    };
+  if (!result.error || !isMissingDurationColumn(result.error)) {
+    return result;
+  }
 
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      const duration = video.duration;
-      cleanup();
+  const fallbackPayload = { ...writePayload };
+  delete fallbackPayload.duration_seconds;
 
-      if (Number.isFinite(duration) && duration > 0) {
-        resolve(duration);
-        return;
-      }
+  return existingEpisodeId
+    ? supabase.from(episodesTable).update(fallbackPayload).eq("id", existingEpisodeId)
+    : supabase.from(episodesTable).insert(fallbackPayload);
+}
 
-      reject(new Error("Video duration олдсонгүй."));
-    };
-    video.onerror = () => {
-      cleanup();
-      reject(new Error("Video duration уншиж чадсангүй."));
-    };
-    video.src = url;
-  });
+function isMissingDurationColumn(error: { message?: string; code?: string }) {
+  const message = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  return message.includes("duration_seconds") || message.includes("column");
 }
 
 async function uploadFileToR2(supabase: SupabaseClient, file: File, key: string) {

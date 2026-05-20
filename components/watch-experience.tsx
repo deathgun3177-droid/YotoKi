@@ -12,6 +12,7 @@ import type { Episode, MediaTitle } from "@/lib/types";
 import { findProgress, upsertProgress } from "@/lib/storage";
 import { loadMongolianSubtitle, type SubtitleCue } from "@/lib/subtitles";
 import { formatPlaybackTime, formatRuntime } from "@/lib/time";
+import { createVideoDurationReader } from "@/lib/video-duration";
 
 type WatchExperienceProps = {
   media: MediaTitle;
@@ -51,6 +52,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(true);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [centerActionVisible, setCenterActionVisible] = useState(true);
+  const [videoBuffering, setVideoBuffering] = useState(false);
   const [softFullscreen, setSoftFullscreen] = useState(false);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [subtitleState, setSubtitleState] = useState<{
@@ -90,13 +92,14 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   }, [currentTime, subtitleCues, subtitleStatus, subtitlesEnabled]);
   const seekPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const volumePercent = Math.min(100, Math.max(0, (isMuted ? 0 : volume) * 100));
-  const currentRuntime = duration > 0 ? formatRuntime(duration) : episode.runtime;
+  const currentRuntime = duration > 0 ? formatRuntime(duration) : episode.durationSeconds ? formatRuntime(episode.durationSeconds) : episode.runtime;
   const getEpisodeRuntimeLabel = useCallback(
     (item: Episode) => {
       if (item.id === episode.id) return currentRuntime;
 
       const resolvedRuntime = episodeRuntimeOverrides[item.id];
       if (resolvedRuntime) return resolvedRuntime;
+      if (item.durationSeconds) return formatRuntime(item.durationSeconds);
 
       return isLegacyRuntimeLabel(item.runtime) ? "Уншиж байна..." : item.runtime;
     },
@@ -327,7 +330,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   }, [episode.id, episode.subtitleUrl, episode.videoUrl, user?.id]);
 
   useEffect(() => {
-    const episodesToResolve = media.episodes.filter((item) => item.id !== episode.id && item.videoUrl);
+    const episodesToResolve = media.episodes.filter((item) => item.id !== episode.id && !item.durationSeconds && item.videoUrl);
     if (!episodesToResolve.length) return;
 
     const needsAuth = episodesToResolve.some((item) => isR2StoragePath(item.videoUrl));
@@ -647,8 +650,12 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
               preload="metadata"
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
+              onWaiting={() => setVideoBuffering(true)}
+              onCanPlay={() => setVideoBuffering(false)}
+              onCanPlayThrough={() => setVideoBuffering(false)}
               onPlay={() => {
                 setIsPlaying(true);
+                setVideoBuffering(false);
                 clearCenterActionTimer();
                 setCenterActionVisible(false);
               }}
@@ -689,8 +696,13 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
               </div>
             ) : null}
 
-            {streamStatus === "loading" ? (
-              <div className="absolute inset-0 grid place-items-center bg-black/50 text-sm font-semibold text-slate-200">Video ачаалж байна...</div>
+            {streamStatus === "loading" || videoBuffering ? (
+              <div className="absolute inset-0 z-10 grid place-items-center bg-black/38 text-sm font-semibold text-slate-200">
+                <div className="soft-border rounded-lg bg-black/58 px-5 py-4 text-center shadow-2xl shadow-black/50 backdrop-blur">
+                  <span className="yotoki-spinner mx-auto block" />
+                  <span className="mt-3 block">{streamStatus === "loading" ? "Video ачаалж байна" : "Түр буферлэж байна"}</span>
+                </div>
+              </div>
             ) : null}
 
             {streamStatus === "error" ? (
@@ -866,55 +878,6 @@ function IconButton({
       {children}
     </button>
   );
-}
-
-function createVideoDurationReader(url: string) {
-  const video = document.createElement("video");
-  let settled = false;
-  let rejectDuration: (error: Error) => void = () => undefined;
-
-  const cleanup = () => {
-    video.onloadedmetadata = null;
-    video.onerror = null;
-    video.removeAttribute("src");
-    video.load();
-  };
-
-  const promise = new Promise<number>((resolve, reject) => {
-    rejectDuration = reject;
-    video.preload = "metadata";
-    video.onloadedmetadata = () => {
-      if (settled) return;
-      settled = true;
-
-      const duration = video.duration;
-      cleanup();
-
-      if (Number.isFinite(duration) && duration > 0) {
-        resolve(duration);
-        return;
-      }
-
-      reject(new Error("Video duration олдсонгүй."));
-    };
-    video.onerror = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error("Video duration уншиж чадсангүй."));
-    };
-    video.src = url;
-  });
-
-  return {
-    promise,
-    cancel: () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      rejectDuration(new Error("Video duration cancelled."));
-    }
-  };
 }
 
 function isLegacyRuntimeLabel(value: string) {

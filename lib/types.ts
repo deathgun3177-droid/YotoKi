@@ -5,6 +5,7 @@ export type Episode = {
   number: number;
   title: string;
   runtime: string;
+  durationSeconds?: number;
   quality: "720p" | "1080p";
   videoUrl: string;
   subtitleUrl?: string;

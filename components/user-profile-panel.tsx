@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { CalendarDays, Check, Copy, Edit3, LogOut, Settings, UploadCloud, UserRound, UsersRound } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
+import { LoadingCard } from "@/components/status-card";
 import { formatAccessStatus, watchAccessDays } from "@/lib/auth/access";
 import { formatPublicUserId } from "@/lib/auth/user-number";
 import type { YotokiUser } from "@/lib/types";
@@ -29,7 +30,7 @@ export function UserProfilePanel() {
   }
 
   if (loading) {
-    return <div className="soft-border loading-bar rounded-lg bg-white/[0.035] p-8 text-slate-400">Профайл ачаалж байна...</div>;
+    return <LoadingCard title="Профайл ачаалж байна" message="Таны User ID, үзэх эрх болон profile мэдээллийг уншиж байна." />;
   }
 
   if (!user) {

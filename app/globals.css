@@ -264,6 +264,21 @@ main {
   animation: yotoki-pulse 1.5s ease-in-out infinite;
 }
 
+.yotoki-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: #2dd4bf;
+  border-radius: 999px;
+  animation: yotoki-spin 0.82s linear infinite;
+}
+
+@keyframes yotoki-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 ::-webkit-scrollbar {
   height: 10px;
   width: 10px;

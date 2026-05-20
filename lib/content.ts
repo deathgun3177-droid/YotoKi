@@ -1,5 +1,6 @@
 import { createPublicSupabaseClient } from "@/lib/supabase/public";
 import { isR2StoragePath } from "@/lib/r2-paths";
+import { formatRuntime } from "@/lib/time";
 import type { LatestEpisode, MediaKind, MediaTitle } from "@/lib/types";
 
 const demoVideo = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4";
@@ -330,6 +331,7 @@ type DbEpisodeRow = {
   number: number | null;
   title: string | null;
   runtime: string | null;
+  duration_seconds?: number | null;
   quality: "720p" | "1080p" | string | null;
   video_path: string | null;
   subtitle_path: string | null;
@@ -391,7 +393,8 @@ async function getSupabaseTitles(): Promise<MediaTitle[]> {
         id: String(episode.id),
         number: episode.number ?? 1,
         title: episode.title || "Анги",
-        runtime: episode.runtime || "Тодорхойгүй",
+        runtime: getEpisodeRuntime(episode),
+        durationSeconds: typeof episode.duration_seconds === "number" && episode.duration_seconds > 0 ? episode.duration_seconds : undefined,
         quality: episode.quality === "720p" ? "720p" : "1080p",
         videoUrl: resolveStorageUrl(videoBucket, episode.video_path, demoVideo, supabase),
         subtitleUrl: resolveOptionalStorageUrl(subtitleBucket, episode.subtitle_path, supabase),
@@ -404,12 +407,21 @@ async function getSupabaseTitles(): Promise<MediaTitle[]> {
 }
 
 async function getSupabaseEpisodeRows(supabase: NonNullable<ReturnType<typeof createPublicSupabaseClient>>) {
+  const withDuration = await supabase
+    .from(mediaEpisodesTable)
+    .select("id,media_id,number,title,runtime,duration_seconds,quality,video_path,subtitle_path,thumbnail_path,is_free,released_at")
+    .order("number", { ascending: true });
+
+  if (!withDuration.error || !isMissingOptionalEpisodeColumn(withDuration.error)) {
+    return withDuration;
+  }
+
   const withFree = await supabase
     .from(mediaEpisodesTable)
     .select("id,media_id,number,title,runtime,quality,video_path,subtitle_path,thumbnail_path,is_free,released_at")
     .order("number", { ascending: true });
 
-  if (!withFree.error || !isMissingIsFreeColumn(withFree.error)) {
+  if (!withFree.error || !isMissingOptionalEpisodeColumn(withFree.error)) {
     return withFree;
   }
 
@@ -419,9 +431,21 @@ async function getSupabaseEpisodeRows(supabase: NonNullable<ReturnType<typeof cr
     .order("number", { ascending: true });
 }
 
-function isMissingIsFreeColumn(error: { message?: string; code?: string }) {
+function isMissingOptionalEpisodeColumn(error: { message?: string; code?: string }) {
   const message = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
-  return message.includes("is_free") || message.includes("column");
+  return message.includes("is_free") || message.includes("duration_seconds") || message.includes("column");
+}
+
+function getEpisodeRuntime(episode: DbEpisodeRow) {
+  if (typeof episode.duration_seconds === "number" && episode.duration_seconds > 0) {
+    return formatRuntime(episode.duration_seconds);
+  }
+
+  if (episode.runtime === "24 мин") {
+    return "Тодорхойгүй";
+  }
+
+  return episode.runtime || "Тодорхойгүй";
 }
 
 function resolveStorageUrl(bucket: string, path: string | null, fallback: string, supabase: NonNullable<ReturnType<typeof createPublicSupabaseClient>>) {

@@ -103,7 +103,7 @@ export function SiteHeader({ initialQuery = "", compact = false }: SiteHeaderPro
             Мэдээлэл
           </Link>
           <Link
-            className="yt-focus inline-flex items-center gap-2 rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:px-3"
+            className="yt-focus hidden items-center gap-2 rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:inline-flex lg:px-3"
             href={authHref}
           >
             {user ? <UserRound size={16} /> : <LogIn size={16} />}

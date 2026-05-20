@@ -5,8 +5,10 @@ import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useCallback, useEffec
 import { Edit3, FileText, ListVideo, Search, Trash2, UploadCloud } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isR2StoragePath } from "@/lib/r2-paths";
+import { formatRuntime } from "@/lib/time";
 import type { MediaKind } from "@/lib/types";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { createVideoDurationReader } from "@/lib/video-duration";
 
 type ManageState = "idle" | "saving" | "done" | "error";
 
@@ -26,6 +28,7 @@ type EditableEpisode = {
   id: string;
   number: number;
   quality: "720p" | "1080p";
+  durationSeconds?: number;
   videoPath: string;
   subtitlePath?: string;
   thumbnailPath?: string;
@@ -52,6 +55,7 @@ export function AdminContentManager() {
   const [updatingSubtitleId, setUpdatingSubtitleId] = useState("");
   const [updatingEpisodeNumberId, setUpdatingEpisodeNumberId] = useState("");
   const [updatingFreeEpisodeId, setUpdatingFreeEpisodeId] = useState("");
+  const [updatingDurationId, setUpdatingDurationId] = useState("");
   const [episodeNumberDrafts, setEpisodeNumberDrafts] = useState<Record<string, number>>({});
   const [subtitleFiles, setSubtitleFiles] = useState<Record<string, File | null>>({});
   const configured = isSupabaseConfigured();
@@ -84,16 +88,22 @@ export function AdminContentManager() {
         return;
       }
 
-      const nextEpisodes: EditableEpisode[] = data.map((episode) => ({
+      const nextEpisodes: EditableEpisode[] = data.map((episode) => {
+        const optionalEpisode = episode as { duration_seconds?: unknown; is_free?: unknown };
+
+        return {
           id: String(episode.id),
           number: typeof episode.number === "number" ? episode.number : 1,
           quality: episode.quality === "720p" ? "720p" : "1080p",
+          durationSeconds:
+            typeof optionalEpisode.duration_seconds === "number" && optionalEpisode.duration_seconds > 0 ? optionalEpisode.duration_seconds : undefined,
           videoPath: String(episode.video_path ?? ""),
           subtitlePath: typeof episode.subtitle_path === "string" ? episode.subtitle_path : undefined,
           thumbnailPath: typeof episode.thumbnail_path === "string" ? episode.thumbnail_path : undefined,
           releasedAt: typeof episode.released_at === "string" ? episode.released_at : "",
-          isFree: Boolean((episode as { is_free?: unknown }).is_free)
-        }));
+          isFree: Boolean(optionalEpisode.is_free)
+        };
+      });
 
       setEpisodes(nextEpisodes);
       setEpisodeNumberDrafts(Object.fromEntries(nextEpisodes.map((episode) => [episode.id, episode.number])));
@@ -532,6 +542,53 @@ export function AdminContentManager() {
     setMessage(`${episode.number}-р анги ${payload.isFree ? "үнэгүй preview" : "эрх шаарддаг"} боллоо.`);
   }
 
+  async function handleRefreshDuration(episode: EditableEpisode) {
+    if (!configured) return;
+
+    const supabase = createBrowserSupabaseClient();
+    if (!supabase) {
+      setStatus("error");
+      setMessage("Supabase client үүссэнгүй.");
+      return;
+    }
+
+    setStatus("saving");
+    setMessage("");
+    setUpdatingDurationId(episode.id);
+
+    try {
+      const videoUrl = isR2StoragePath(episode.videoPath) ? await getSignedR2Url(supabase, episode.videoPath) : episode.videoPath;
+      const reader = createVideoDurationReader(videoUrl);
+      const seconds = Math.round(await reader.promise);
+      const runtime = formatRuntime(seconds);
+
+      const { error } = await supabase
+        .from(episodesTable)
+        .update({ duration_seconds: seconds, runtime, updated_at: new Date().toISOString() })
+        .eq("id", episode.id);
+
+      if (error) {
+        if (!isMissingOptionalEpisodeColumn(error)) {
+          throw error;
+        }
+
+        const fallback = await supabase.from(episodesTable).update({ runtime, updated_at: new Date().toISOString() }).eq("id", episode.id);
+        if (fallback.error) {
+          throw fallback.error;
+        }
+      }
+
+      setEpisodes((current) => current.map((item) => (item.id === episode.id ? { ...item, durationSeconds: seconds } : item)));
+      setStatus("done");
+      setMessage(`${episode.number}-р ангийн хугацаа ${runtime} гэж хадгалагдлаа.`);
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Video хугацаа уншиж чадсангүй.");
+    } finally {
+      setUpdatingDurationId("");
+    }
+  }
+
   function updateForm(next: Partial<EditableTitle>) {
     setForm((current) => (current ? { ...current, ...next } : current));
   }
@@ -645,6 +702,8 @@ export function AdminContentManager() {
                   const numberBusy = updatingEpisodeNumberId === episode.id;
                   const numberChanged = draftNumber !== episode.number;
                   const freeBusy = updatingFreeEpisodeId === episode.id;
+                  const durationBusy = updatingDurationId === episode.id;
+                  const runtimeLabel = episode.durationSeconds ? formatRuntime(episode.durationSeconds) : "Хугацаа хадгалагдаагүй";
 
                   return (
                     <div key={episode.id} className="grid min-w-0 gap-3 rounded-md border border-white/10 bg-white/[0.04] px-3 py-3">
@@ -652,7 +711,7 @@ export function AdminContentManager() {
                         <div className="min-w-0">
                           <p className="font-semibold text-white">{episode.number}-р анги</p>
                           <p className="mt-1 max-w-full truncate text-xs text-slate-500">
-                            {episode.quality} · {episode.subtitlePath ? "MN хадмалтай" : "Хадмалгүй"} · {episode.isFree ? "Үнэгүй preview" : "Эрх шаардна"} · {episode.videoPath}
+                            {episode.quality} · {runtimeLabel} · {episode.subtitlePath ? "MN хадмалтай" : "Хадмалгүй"} · {episode.isFree ? "Үнэгүй preview" : "Эрх шаардна"}
                           </p>
                         </div>
                         <button
@@ -698,6 +757,24 @@ export function AdminContentManager() {
 
                       <div className="grid min-w-0 gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                         <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white">Video хугацаа</p>
+                          <p className="mt-1 truncate text-xs leading-5 text-slate-500" title={episode.videoPath}>
+                            {runtimeLabel} · {compactStoragePath(episode.videoPath)}
+                          </p>
+                        </div>
+                        <button
+                          disabled={status === "saving" || durationBusy || !episode.videoPath}
+                          className="yt-focus inline-flex h-10 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.055] px-4 text-sm font-semibold text-white transition hover:border-teal-300/35 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={() => void handleRefreshDuration(episode)}
+                        >
+                          <UploadCloud size={15} />
+                          {durationBusy ? "Уншиж байна" : "Хугацаа шинэчлэх"}
+                        </button>
+                      </div>
+
+                      <div className="grid min-w-0 gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                        <div className="min-w-0">
                           <p className="text-xs font-semibold text-white">Үнэгүй preview</p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
                             Login хийсэн хүн үзэх эрхгүй байсан ч энэ ангийг үзнэ.
@@ -731,7 +808,7 @@ export function AdminContentManager() {
                           <span className="min-w-0">
                             <span className="block text-xs font-semibold text-white">Subtitle солих</span>
                             <span className="block max-w-full truncate text-xs text-slate-500" title={selectedSubtitleFile?.name || episode.subtitlePath || ".srt / .ass / .vtt"}>
-                              {selectedSubtitleFile?.name || episode.subtitlePath || ".srt / .ass / .vtt"}
+                              {selectedSubtitleFile?.name || compactStoragePath(episode.subtitlePath) || ".srt / .ass / .vtt"}
                             </span>
                           </span>
                           <input
@@ -853,13 +930,23 @@ function QualityPicker({
 }
 
 async function selectEpisodesForAdmin(supabase: SupabaseClient, mediaId: string) {
+  const withDuration = await supabase
+    .from(episodesTable)
+    .select("id,number,quality,duration_seconds,video_path,subtitle_path,thumbnail_path,is_free,released_at")
+    .eq("media_id", mediaId)
+    .order("number", { ascending: true });
+
+  if (!withDuration.error || !isMissingOptionalEpisodeColumn(withDuration.error)) {
+    return withDuration;
+  }
+
   const withFree = await supabase
     .from(episodesTable)
     .select("id,number,quality,video_path,subtitle_path,thumbnail_path,is_free,released_at")
     .eq("media_id", mediaId)
     .order("number", { ascending: true });
 
-  if (!withFree.error || !isMissingIsFreeColumn(withFree.error)) {
+  if (!withFree.error || !isMissingOptionalEpisodeColumn(withFree.error)) {
     return withFree;
   }
 
@@ -870,9 +957,9 @@ async function selectEpisodesForAdmin(supabase: SupabaseClient, mediaId: string)
     .order("number", { ascending: true });
 }
 
-function isMissingIsFreeColumn(error: { message?: string; code?: string }) {
+function isMissingOptionalEpisodeColumn(error: { message?: string; code?: string }) {
   const message = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
-  return message.includes("is_free") || message.includes("column");
+  return message.includes("is_free") || message.includes("duration_seconds") || message.includes("column");
 }
 
 function normalizeGenresInput(value: string, mediaKind: MediaKind) {
@@ -897,6 +984,15 @@ function normalizeEpisodeNumber(value: number) {
 
 function toSupabaseStoragePaths(value?: string) {
   return value && !isR2StoragePath(value) ? [value] : [];
+}
+
+function compactStoragePath(value?: string) {
+  if (!value) return "";
+  const normalized = value.split("?")[0] ?? value;
+  const parts = normalized.split("/").filter(Boolean);
+  const fileName = parts.at(-1) ?? normalized;
+  const folder = parts.length > 2 ? parts.at(-2) : parts.at(0);
+  return folder ? `${folder}/${fileName}` : fileName;
 }
 
 function handleSubtitleFileChange(
@@ -983,6 +1079,25 @@ async function getAccessToken(supabase: SupabaseClient) {
   const token = data.session?.access_token;
   if (!token) throw new Error("Admin session олдсонгүй. Дахин нэвтэрнэ үү.");
   return token;
+}
+
+async function getSignedR2Url(supabase: SupabaseClient, path: string) {
+  const token = await getAccessToken(supabase);
+  const response = await fetch("/api/r2/watch-url", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ path })
+  });
+
+  const payload = (await response.json().catch(() => null)) as { url?: string; error?: string } | null;
+  if (!response.ok || !payload?.url) {
+    throw new Error(payload?.error || "Video URL авч чадсангүй.");
+  }
+
+  return payload.url;
 }
 
 function isSubtitleFile(file: File) {

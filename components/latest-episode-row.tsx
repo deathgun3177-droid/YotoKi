@@ -29,6 +29,7 @@ export function LatestEpisodeRow({ episode }: { episode: LatestEpisode }) {
         <div className="min-w-0 p-2.5 sm:p-4">
           <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-200 sm:text-xs sm:tracking-[0.16em]">{episode.mediaTitle}</p>
           <h3 className="mt-1 truncate text-sm font-medium text-white sm:text-base">{episode.title}</h3>
+          <p className="mt-1 truncate text-xs text-slate-500">{episode.runtime}</p>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] sm:mt-3 sm:gap-2 sm:text-[11px] sm:tracking-[0.12em]">
             <span className="rounded bg-white/8 px-2 py-1 text-slate-300">EP {episode.number}</span>
             <span className="rounded bg-white/8 px-2 py-1 text-slate-300">{episode.quality}</span>

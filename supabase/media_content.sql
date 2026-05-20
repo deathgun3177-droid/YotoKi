@@ -23,6 +23,7 @@ create table if not exists public.media_episodes (
   number integer not null check (number > 0),
   title text not null default 'Анги',
   runtime text not null default 'Тодорхойгүй',
+  duration_seconds integer check (duration_seconds is null or duration_seconds > 0),
   quality text not null default '1080p' check (quality in ('720p', '1080p')),
   video_path text not null,
   subtitle_path text,
@@ -35,6 +36,9 @@ create table if not exists public.media_episodes (
 
 alter table public.media_episodes
 add column if not exists is_free boolean not null default false;
+
+alter table public.media_episodes
+add column if not exists duration_seconds integer check (duration_seconds is null or duration_seconds > 0);
 
 alter table public.media_episodes
 alter column runtime set default 'Тодорхойгүй';
