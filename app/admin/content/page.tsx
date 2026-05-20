@@ -6,7 +6,7 @@ export default function AdminContentPage() {
   return (
     <main className="cinema-shell min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#050506]">
       <SiteHeader compact />
-      <div className="mx-auto w-full max-w-6xl px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pb-16 sm:pt-8 lg:px-8">
+      <div className="mx-auto w-full max-w-5xl px-4 pb-[calc(4rem+env(safe-area-inset-bottom))] pt-6 sm:px-6 sm:pb-16 sm:pt-8">
         <AdminOnly>
           <div className="mb-6">
             <p className="text-sm font-medium uppercase tracking-[0.22em] text-teal-200/70">Admin</p>

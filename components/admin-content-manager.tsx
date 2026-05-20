@@ -537,8 +537,8 @@ export function AdminContentManager() {
   }
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
-      <aside className="soft-border h-max rounded-lg bg-white/[0.035] p-4">
+    <section className="mx-auto grid w-full min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)]">
+      <aside className="soft-border min-w-0 h-max rounded-lg bg-white/[0.04] p-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={17} />
           <input
@@ -573,7 +573,7 @@ export function AdminContentManager() {
       </aside>
 
       {form ? (
-        <form onSubmit={handleSave} className="soft-border rounded-lg bg-white/[0.035] p-4 sm:p-6">
+        <form onSubmit={handleSave} className="soft-border min-w-0 rounded-lg bg-white/[0.04] p-4 sm:p-5">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-md bg-violet-300/14 text-violet-100">
@@ -620,7 +620,7 @@ export function AdminContentManager() {
             />
           </label>
 
-          <section className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
+          <section className="mt-5 min-w-0 rounded-lg border border-white/10 bg-black/20 p-3.5 sm:p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="grid h-9 w-9 place-items-center rounded-md bg-teal-300/12 text-teal-100">
@@ -637,7 +637,7 @@ export function AdminContentManager() {
             {episodesLoading ? (
               <p className="rounded-md bg-white/[0.04] px-3 py-3 text-sm text-slate-400">Ангиуд уншиж байна...</p>
             ) : episodes.length ? (
-              <div className="grid gap-2">
+              <div className="grid min-w-0 gap-2">
                 {episodes.map((episode) => {
                   const selectedSubtitleFile = subtitleFiles[episode.id] ?? null;
                   const subtitleBusy = updatingSubtitleId === episode.id;
@@ -647,7 +647,7 @@ export function AdminContentManager() {
                   const freeBusy = updatingFreeEpisodeId === episode.id;
 
                   return (
-                    <div key={episode.id} className="grid gap-3 rounded-md border border-white/10 bg-white/[0.035] px-3 py-3">
+                    <div key={episode.id} className="grid min-w-0 gap-3 rounded-md border border-white/10 bg-white/[0.04] px-3 py-3">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <p className="font-semibold text-white">{episode.number}-р анги</p>
@@ -666,7 +666,7 @@ export function AdminContentManager() {
                         </button>
                       </div>
 
-                      <div className="grid gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[140px_auto_1fr] sm:items-end">
+                      <div className="grid min-w-0 gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[132px_auto_minmax(0,1fr)] sm:items-end">
                         <label className="block">
                           <span className="mb-1.5 block text-xs font-medium text-slate-400">Анги дугаар</span>
                           <input
@@ -691,13 +691,13 @@ export function AdminContentManager() {
                           <Edit3 size={15} />
                           {numberBusy ? "Сольж байна" : "Дугаар солих"}
                         </button>
-                        <p className="text-xs leading-5 text-slate-500">
+                        <p className="min-w-0 text-xs leading-5 text-slate-500">
                           Буруу дугаартай оруулсан бол video дахин upload хийхгүйгээр эндээс солино.
                         </p>
                       </div>
 
-                      <div className="flex flex-col gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
+                      <div className="flex min-w-0 flex-col gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
                           <p className="text-xs font-semibold text-white">Үнэгүй preview</p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
                             Login хийсэн хүн үзэх эрхгүй байсан ч энэ ангийг үзнэ.
@@ -723,7 +723,7 @@ export function AdminContentManager() {
                         </button>
                       </div>
 
-                      <div className="grid gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                      <div className="grid min-w-0 gap-2 rounded-md border border-white/8 bg-black/18 p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                         <label className="yt-focus grid min-w-0 cursor-pointer grid-cols-[34px_minmax(0,1fr)] items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-2 transition hover:border-teal-300/35 hover:bg-white/[0.06]">
                           <span className="grid h-8 w-8 place-items-center rounded bg-teal-300/12 text-teal-100">
                             <FileText size={16} />
