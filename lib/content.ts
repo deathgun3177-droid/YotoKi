@@ -391,7 +391,7 @@ async function getSupabaseTitles(): Promise<MediaTitle[]> {
         id: String(episode.id),
         number: episode.number ?? 1,
         title: episode.title || "Анги",
-        runtime: episode.runtime || "24 мин",
+        runtime: episode.runtime || "Тодорхойгүй",
         quality: episode.quality === "720p" ? "720p" : "1080p",
         videoUrl: resolveStorageUrl(videoBucket, episode.video_path, demoVideo, supabase),
         subtitleUrl: resolveOptionalStorageUrl(subtitleBucket, episode.subtitle_path, supabase),

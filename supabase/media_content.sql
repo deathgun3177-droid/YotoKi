@@ -22,7 +22,7 @@ create table if not exists public.media_episodes (
   media_id uuid not null references public.media_titles(id) on delete cascade,
   number integer not null check (number > 0),
   title text not null default 'Анги',
-  runtime text not null default '24 мин',
+  runtime text not null default 'Тодорхойгүй',
   quality text not null default '1080p' check (quality in ('720p', '1080p')),
   video_path text not null,
   subtitle_path text,
@@ -35,6 +35,9 @@ create table if not exists public.media_episodes (
 
 alter table public.media_episodes
 add column if not exists is_free boolean not null default false;
+
+alter table public.media_episodes
+alter column runtime set default 'Тодорхойгүй';
 
 create index if not exists media_titles_added_at_idx on public.media_titles (added_at desc);
 create index if not exists media_titles_kind_idx on public.media_titles (kind);

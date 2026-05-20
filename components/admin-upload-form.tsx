@@ -7,6 +7,7 @@ import type { AdminUploadDraft, MediaKind } from "@/lib/types";
 import { mediaTitles } from "@/lib/content";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { filenamesMatch } from "@/lib/subtitles";
+import { formatRuntime } from "@/lib/time";
 
 type UploadState = "idle" | "uploading" | "done" | "error";
 
@@ -39,9 +40,12 @@ export function AdminUploadForm() {
   const [selectedMediaId, setSelectedMediaId] = useState("");
   const [episodeNumber, setEpisodeNumber] = useState(1);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | null>(null);
+  const [videoDurationStatus, setVideoDurationStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [subtitleFile, setSubtitleFile] = useState<File | null>(null);
   const [episodeStatus, setEpisodeStatus] = useState<UploadState>("idle");
   const [episodeMessage, setEpisodeMessage] = useState("");
+  const durationRequestRef = useRef(0);
 
   const configured = isSupabaseConfigured();
   const selectedMedia = useMemo(
@@ -103,6 +107,33 @@ export function AdminUploadForm() {
       void loadMediaOptions();
     });
   }, [loadMediaOptions]);
+
+  const handleVideoFileChange = useCallback((file: File | null) => {
+    const requestId = durationRequestRef.current + 1;
+    durationRequestRef.current = requestId;
+
+    setVideoFile(file);
+    setVideoDurationSeconds(null);
+
+    if (!file) {
+      setVideoDurationStatus("idle");
+      return;
+    }
+
+    setVideoDurationStatus("loading");
+
+    readVideoDuration(file)
+      .then((seconds) => {
+        if (durationRequestRef.current !== requestId) return;
+        setVideoDurationSeconds(seconds);
+        setVideoDurationStatus("ready");
+      })
+      .catch(() => {
+        if (durationRequestRef.current !== requestId) return;
+        setVideoDurationSeconds(null);
+        setVideoDurationStatus("error");
+      });
+  }, []);
 
   async function handleTitleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -235,6 +266,8 @@ export function AdminUploadForm() {
 
       const episodePath = `${selectedMedia.slug}/episode-${episodeNumber}`;
       const videoPath = `${episodePath}/${cleanFileName(videoFile.name)}`;
+      const durationSeconds = videoDurationSeconds ?? (await readVideoDuration(videoFile).catch(() => 0));
+      const runtime = durationSeconds > 0 ? formatRuntime(durationSeconds) : "Тодорхойгүй";
       const videoStoragePath = await uploadFileToR2(supabase, videoFile, videoPath);
 
       let subtitlePath: string | null = null;
@@ -247,7 +280,7 @@ export function AdminUploadForm() {
         media_id: selectedMedia.id,
         number: episodeNumber,
         title: selectedMedia.kind === "movie" ? "Бүрэн кино" : `Анги ${episodeNumber}`,
-        runtime: "24 мин",
+        runtime,
         quality: selectedMedia.quality,
         video_path: videoStoragePath,
         subtitle_path: subtitlePath,
@@ -275,6 +308,8 @@ export function AdminUploadForm() {
       setEpisodeStatus("done");
       setEpisodeMessage(`${selectedMedia.title} дээр ${episodeNumber}-р анги ${existingEpisodeId ? "шинэчлэгдлээ" : "нэмэгдлээ"}.`);
       setVideoFile(null);
+      setVideoDurationSeconds(null);
+      setVideoDurationStatus("idle");
       setSubtitleFile(null);
     } catch (error) {
       setEpisodeStatus("error");
@@ -360,13 +395,14 @@ export function AdminUploadForm() {
         </div>
 
         <div className="mt-5 grid gap-3">
-          <FileDrop icon={<Video size={20} />} label="Upload video" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv" file={videoFile} onChange={setVideoFile} />
+          <FileDrop icon={<Video size={20} />} label="Upload video" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv" file={videoFile} onChange={handleVideoFileChange} />
           <FileDrop icon={<FileText size={20} />} label="Upload subtitle" accept=".srt,.ass,.vtt" file={subtitleFile} onChange={setSubtitleFile} />
         </div>
 
         <div className="mt-5 grid gap-3 text-sm">
           <StatusRow active={Boolean(selectedMedia)} label={selectedMedia?.title || "Гарчиг сонгох"} />
           <StatusRow active={Boolean(videoFile)} label={videoFile?.name || "Video"} />
+          <StatusRow active={videoDurationStatus === "ready"} label={getDurationStatusLabel(videoDurationStatus, videoDurationSeconds)} />
           <StatusRow active={Boolean(subtitleFile)} label={subtitleFile?.name || "Subtitle"} />
           <StatusRow active={matchedNames} label="Filename match" />
           <StatusRow active={configured} label="Supabase connected" />
@@ -578,6 +614,44 @@ function StatusRow({ active, label }: { active: boolean; label: string }) {
 
 function StatusMessage({ status, message }: { status: UploadState; message: string }) {
   return <span className={`text-sm ${status === "error" ? "text-rose-300" : "text-slate-300"}`}>{message}</span>;
+}
+
+function getDurationStatusLabel(status: "idle" | "loading" | "ready" | "error", seconds: number | null) {
+  if (status === "ready" && seconds) return `Runtime: ${formatRuntime(seconds)}`;
+  if (status === "loading") return "Runtime уншиж байна";
+  if (status === "error") return "Runtime уншиж чадсангүй";
+  return "Runtime metadata";
+}
+
+function readVideoDuration(file: File) {
+  return new Promise<number>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      cleanup();
+
+      if (Number.isFinite(duration) && duration > 0) {
+        resolve(duration);
+        return;
+      }
+
+      reject(new Error("Video duration олдсонгүй."));
+    };
+    video.onerror = () => {
+      cleanup();
+      reject(new Error("Video duration уншиж чадсангүй."));
+    };
+    video.src = url;
+  });
 }
 
 async function uploadFileToR2(supabase: SupabaseClient, file: File, key: string) {

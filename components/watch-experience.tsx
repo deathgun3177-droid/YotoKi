@@ -11,6 +11,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import type { Episode, MediaTitle } from "@/lib/types";
 import { findProgress, upsertProgress } from "@/lib/storage";
 import { loadMongolianSubtitle, type SubtitleCue } from "@/lib/subtitles";
+import { formatPlaybackTime, formatRuntime } from "@/lib/time";
 
 type WatchExperienceProps = {
   media: MediaTitle;
@@ -88,6 +89,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
   }, [currentTime, subtitleCues, subtitleStatus, subtitlesEnabled]);
   const seekPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const volumePercent = Math.min(100, Math.max(0, (isMuted ? 0 : volume) * 100));
+  const currentRuntime = duration > 0 ? formatRuntime(duration) : episode.runtime;
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
@@ -683,7 +685,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
                 ) : null}
 
                 <span className="min-w-[92px] text-xs tabular-nums text-slate-300">
-                  {formatTime(currentTime)} / {formatTime(duration)}
+                  {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
                 </span>
 
                 <div className="ml-auto flex items-center gap-2">
@@ -767,7 +769,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
                 <div className="min-w-0 p-2.5">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-teal-200">EP {item.number}</p>
                   <p className="mt-1 truncate text-sm text-white">{item.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.runtime}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.id === episode.id ? currentRuntime : item.runtime}</p>
                 </div>
               </Link>
             );
@@ -811,15 +813,6 @@ function IconButton({
       {children}
     </button>
   );
-}
-
-function formatTime(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return "0:00";
-
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.floor(value % 60);
-
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 async function getSignedR2Url(path: string) {
