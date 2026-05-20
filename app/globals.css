@@ -168,7 +168,7 @@ main {
     display: -webkit-box !important;
     max-width: 92% !important;
     overflow: hidden !important;
-    padding: 0.18rem 0.4rem !important;
+    padding: 2.5px 6px !important;
     font-size: clamp(0.7rem, 3.05vw, 0.88rem) !important;
     line-height: 1.2 !important;
     -webkit-box-orient: vertical;
