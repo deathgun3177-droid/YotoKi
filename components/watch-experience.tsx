@@ -90,6 +90,7 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
     if (!subtitlesEnabled || subtitleStatus !== "ready") return "";
     return subtitleCues.find((cue) => currentTime >= cue.start && currentTime <= cue.end)?.text ?? "";
   }, [currentTime, subtitleCues, subtitleStatus, subtitlesEnabled]);
+  const subtitleIsMultiLine = activeSubtitle.includes("\n") || activeSubtitle.length > 34;
   const seekPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
   const volumePercent = Math.min(100, Math.max(0, (isMuted ? 0 : volume) * 100));
   const currentRuntime = duration > 0 ? formatRuntime(duration) : episode.durationSeconds ? formatRuntime(episode.durationSeconds) : episode.runtime;
@@ -685,7 +686,11 @@ export function WatchExperience({ media, episode, nextEpisode }: WatchExperience
             ) : null}
 
             {activeSubtitle ? (
-              <div className="subtitle-overlay yotoki-subtitle-wrap pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center">
+              <div
+                className={`subtitle-overlay yotoki-subtitle-wrap pointer-events-none absolute inset-x-4 bottom-[12%] z-10 text-center ${
+                  subtitleIsMultiLine ? "multi-line" : ""
+                }`}
+              >
                 <span
                   className={`yotoki-subtitle-text inline-block max-w-[92%] whitespace-pre-line rounded-md bg-black/62 font-semibold leading-snug text-white shadow-[0_3px_18px_rgba(0,0,0,0.75)] ${
                     fullscreenLayout ? "px-3 py-1.5 text-2xl sm:text-3xl lg:text-4xl" : "px-2.5 py-1 text-base sm:text-xl"
