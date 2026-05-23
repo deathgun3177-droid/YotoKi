@@ -81,25 +81,25 @@ export function SiteHeader({ initialQuery = "", compact = false }: SiteHeaderPro
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Аниме, кино хайх"
-            className="yt-focus h-11 w-full rounded-lg border border-white/10 bg-white/[0.055] pl-10 pr-3 text-sm text-white placeholder:text-slate-500 transition focus:border-teal-300/45 lg:h-10"
+            className="yt-focus h-11 w-full rounded-lg border border-white/10 bg-white/[0.055] pl-10 pr-10 text-center text-sm text-white placeholder:text-slate-500 transition focus:border-teal-300/45 lg:h-10 lg:pr-3 lg:text-left"
           />
         </form>
 
         <nav
-          className={`w-full items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 text-sm text-slate-300 [scrollbar-width:none] lg:w-auto lg:gap-2 lg:overflow-visible lg:pb-0 ${
+          className={`w-full items-center justify-between gap-0 overflow-hidden whitespace-nowrap pb-1 text-[15px] text-slate-300 [scrollbar-width:none] sm:text-base lg:w-auto lg:justify-start lg:gap-2 lg:overflow-visible lg:pb-0 lg:text-sm ${
             compact ? "hidden lg:flex" : "flex"
           }`}
         >
-          <Link className="yt-focus rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:px-3" href="/#recently">
+          <Link className="yt-focus flex-1 rounded-md px-1 py-2 text-center transition hover:bg-white/8 hover:text-white lg:flex-none lg:px-3" href="/#recently">
             Шинэ
           </Link>
-          <Link className="yt-focus rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:px-3" href="/anime">
+          <Link className="yt-focus flex-1 rounded-md px-1 py-2 text-center transition hover:bg-white/8 hover:text-white lg:flex-none lg:px-3" href="/anime">
             Аниме
           </Link>
-          <Link className="yt-focus rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:px-3" href="/movies">
+          <Link className="yt-focus flex-1 rounded-md px-1 py-2 text-center transition hover:bg-white/8 hover:text-white lg:flex-none lg:px-3" href="/movies">
             Кино
           </Link>
-          <Link className="yt-focus rounded-md px-2.5 py-2 transition hover:bg-white/8 hover:text-white lg:px-3" href="/info">
+          <Link className="yt-focus flex-1 rounded-md px-1 py-2 text-center transition hover:bg-white/8 hover:text-white lg:flex-none lg:px-3" href="/info">
             Мэдээлэл
           </Link>
           <Link
